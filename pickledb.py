@@ -4,9 +4,12 @@ Harrison Erd - https://harrisonerd.com/
 Licensed - BSD 3 Clause (see LICENSE)
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
 import re
+from collections.abc import Iterable
 from typing import Any
 import uuid
 
@@ -56,10 +59,27 @@ class PickleDB:
     orjson-encoded file at `self.location`.
     """
 
-    def __init__(self, location: str):
+    def __init__(
+        self,
+        location: str,
+        replicas: Iterable[str] | None = None,
+        replica_manager: Any | None = None,
+    ):
         self.location = os.path.expanduser(location)
         self.db: dict[str, Any] = {}
         self._lock = asyncio.Lock()
+
+        if replicas is not None and replica_manager is not None:
+            raise ValueError("Use either replicas or replica_manager, not both.")
+
+        if replica_manager is None and replicas is not None:
+            replica_list = list(replicas)
+            if replica_list:
+                from replica_manager import ReplicaManager
+
+                replica_manager = ReplicaManager(replica_list)
+
+        self.replica_manager = replica_manager
 
     def __enter__(self):
         self.load()
@@ -114,8 +134,13 @@ class PickleDB:
     @dualmethod
     async def set(self, key, value) -> bool:
         """Set a key-value pair. Always returns True."""
+        key = str(key)
         async with self._lock:
-            self.db[str(key)] = value
+            self.db[key] = value
+
+        if self.replica_manager is not None:
+            await self.replica_manager.replicate(key, value)
+
         return True
 
     @dualmethod
@@ -135,6 +160,12 @@ class PickleDB:
         """Return a list of all keys."""
         async with self._lock:
             return list(self.db.keys())
+
+    @dualmethod
+    async def dump(self):
+        """Return a shallow copy of the database."""
+        async with self._lock:
+            return dict(self.db)
 
     @dualmethod
     async def purge(self) -> bool:

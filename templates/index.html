@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Distributed PickleDB · Cluster Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg:         #0d1117;
+            --surface:    #161b22;
+            --surface2:   #1c2230;
+            --surface3:   #21293a;
+            --border:     #30363d;
+            --border2:    #3d4a5c;
+            --cyan:       #00d9ff;
+            --cyan-dim:   rgba(0,217,255,0.12);
+            --cyan-glow:  rgba(0,217,255,0.25);
+            --green:      #39d353;
+            --green-dim:  rgba(57,211,83,0.12);
+            --red:        #ff6b6b;
+            --red-dim:    rgba(255,107,107,0.12);
+            --yellow:     #f5c542;
+            --text:       #e6edf3;
+            --text-muted: #7d8590;
+            --text-dim:   #4a5568;
+            --mono:       'JetBrains Mono', 'Fira Code', monospace;
+            --sans:       'Inter', system-ui, sans-serif;
+        }
+
+        html { height: 100%; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--sans);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── TOPBAR ── */
+        .topbar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 2rem;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(8px);
+        }
+
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            font-family: var(--mono);
+            font-weight: 700;
+            font-size: 1rem;
+            color: var(--cyan);
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo-icon {
+            width: 28px;
+            height: 28px;
+            background: var(--cyan-dim);
+            border: 1px solid var(--cyan);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .topbar-breadcrumb {
+            font-family: var(--mono);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .topbar-breadcrumb span {
+            color: var(--text-dim);
+            margin: 0 0.3rem;
+        }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            color: var(--green);
+            letter-spacing: 0.5px;
+        }
+
+        .live-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+            animation: livepulse 2s infinite;
+        }
+
+        @keyframes livepulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(57,211,83,0.4); }
+            50%       { opacity: 0.6; box-shadow: 0 0 0 5px rgba(57,211,83,0); }
+        }
+
+        .refresh-badge {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            background: var(--surface3);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 0.2rem 0.5rem;
+        }
+
+        /* ── LAYOUT ── */
+        .app-layout {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* ── SIDEBAR ── */
+        .sidebar {
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            padding: 1.5rem 1.2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .sidebar-section-label {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 0.75rem;
+        }
+
+        /* Cluster topology mini-visual */
+        .topology-canvas {
+            width: 100%;
+            height: 140px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 1rem;
+        }
+
+        .topology-canvas svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Node health cards in sidebar */
+        .node-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+        }
+
+        .node-item {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0.7rem 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            transition: border-color 0.2s, background 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .node-item::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 3px;
+            border-radius: 3px 0 0 3px;
+        }
+
+        .node-item.online::before  { background: var(--green); }
+        .node-item.offline::before { background: var(--red); }
+
+        .node-item.online  { border-color: rgba(57,211,83,0.2); }
+        .node-item.offline { border-color: rgba(255,107,107,0.2); }
+
+        .node-pulse-ring {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .node-item.online  .node-pulse-ring { background: var(--green-dim); }
+        .node-item.offline .node-pulse-ring { background: var(--red-dim); }
+
+        .node-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .node-item.online  .node-dot { background: var(--green); }
+        .node-item.offline .node-dot { background: var(--red); }
+
+        .node-item.online .node-pulse-ring::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            border: 1.5px solid var(--green);
+            animation: ring-pulse 2.5s infinite;
+        }
+
+        @keyframes ring-pulse {
+            0%   { opacity: 0.8; transform: scale(0.6); }
+            100% { opacity: 0;   transform: scale(1.3); }
+        }
+
+        .node-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .node-name-text {
+            font-family: var(--mono);
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .node-status-text {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            margin-top: 0.2rem;
+        }
+
+        .node-item.online  .node-status-text { color: var(--green); }
+        .node-item.offline .node-status-text { color: var(--red); }
+
+        /* ── MAIN CONTENT ── */
+        .main-content {
+            padding: 1.5rem 1.8rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.4rem;
+            overflow-y: auto;
+        }
+
+        /* ── PANEL / CARD ── */
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 0.85rem 1.2rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--surface2);
+        }
+
+        .panel-title {
+            font-family: var(--mono);
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .panel-title-icon {
+            font-size: 0.9rem;
+        }
+
+        .panel-pill {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            border: 1px solid;
+        }
+
+        .panel-pill.cyan  { color: var(--cyan); border-color: var(--cyan); background: var(--cyan-dim); }
+        .panel-pill.green { color: var(--green); border-color: var(--green); background: var(--green-dim); }
+
+        .panel-body {
+            padding: 1.1rem 1.2rem;
+        }
+
+        /* ── PRIMARY DATA TABLE ── */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: var(--mono);
+            font-size: 0.82rem;
+        }
+
+        .data-table th {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-dim);
+            font-weight: 600;
+            padding: 0.4rem 0.8rem 0.7rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .data-table td {
+            padding: 0.65rem 0.8rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+            word-break: break-word;
+        }
+
+        .data-table tr:last-child td { border-bottom: none; }
+
+        .data-table tr:hover td { background: var(--surface2); }
+
+        .key-cell {
+            color: var(--cyan);
+            font-weight: 600;
+            white-space: nowrap;
+            width: 35%;
+        }
+
+        .key-badge {
+            background: var(--cyan-dim);
+            border: 1px solid rgba(0,217,255,0.2);
+            padding: 0.1rem 0.5rem;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .val-cell {
+            color: var(--text);
+            font-size: 0.8rem;
+        }
+
+        .scrollable { max-height: 320px; overflow-y: auto; }
+
+        /* scrollbar */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+        /* ── REPLICA GRID ── */
+        .replica-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 1rem;
+        }
+
+        .replica-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+
+        .replica-card.healthy  { border-color: rgba(57,211,83,0.2); }
+        .replica-card.unhealthy{ border-color: rgba(255,107,107,0.2); }
+
+        .replica-card-head {
+            padding: 0.65rem 0.9rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--surface3);
+        }
+
+        .replica-node-label {
+            font-family: var(--mono);
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .status-chip {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 0.18rem 0.55rem;
+            border-radius: 20px;
+            letter-spacing: 0.3px;
+        }
+
+        .chip-ok    { background: var(--green-dim); color: var(--green); border: 1px solid rgba(57,211,83,0.3); }
+        .chip-error { background: var(--red-dim);   color: var(--red);   border: 1px solid rgba(255,107,107,0.3); }
+
+        .replica-card-body {
+            padding: 0.7rem 0.9rem;
+            max-height: 220px;
+            overflow-y: auto;
+        }
+
+        .replica-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: baseline;
+            padding: 0.35rem 0;
+            border-bottom: 1px solid var(--border);
+            font-family: var(--mono);
+            font-size: 0.78rem;
+        }
+
+        .replica-row:last-child { border-bottom: none; }
+
+        .r-key {
+            color: var(--cyan);
+            font-weight: 600;
+            flex-shrink: 0;
+            max-width: 100px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .r-sep { color: var(--text-dim); }
+
+        .r-val {
+            color: var(--text-muted);
+            word-break: break-word;
+            flex: 1;
+            font-size: 0.75rem;
+        }
+
+        .replica-error-msg {
+            font-family: var(--mono);
+            font-size: 0.78rem;
+            color: var(--red);
+            background: var(--red-dim);
+            padding: 0.6rem;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        /* ── WRITE FORM ── */
+        .form-row {
+            display: flex;
+            gap: 0.9rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+
+        .field {
+            flex: 1;
+            min-width: 160px;
+        }
+
+        .field label {
+            display: block;
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.4rem;
+        }
+
+        .field input {
+            width: 100%;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 0.85rem;
+            padding: 0.65rem 0.9rem;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            outline: none;
+        }
+
+        .field input::placeholder { color: var(--text-dim); }
+
+        .field input:focus {
+            border-color: var(--cyan);
+            box-shadow: 0 0 0 3px var(--cyan-glow);
+        }
+
+        .btn-save {
+            background: var(--cyan);
+            color: #0d1117;
+            border: none;
+            font-family: var(--mono);
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 0.65rem 1.6rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .btn-save:hover:not(:disabled) {
+            background: #33e5ff;
+            box-shadow: 0 0 20px rgba(0,217,255,0.3);
+        }
+
+        .btn-save:active:not(:disabled) { transform: translateY(1px); }
+
+        .btn-save:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* ── EMPTY / ERROR STATES ── */
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-dim);
+            font-family: var(--mono);
+            font-size: 0.82rem;
+        }
+
+        .empty-state .empty-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+
+        .error-state {
+            font-family: var(--mono);
+            font-size: 0.82rem;
+            color: var(--red);
+            background: var(--red-dim);
+            border: 1px solid rgba(255,107,107,0.2);
+            border-radius: 8px;
+            padding: 0.9rem 1rem;
+        }
+
+        /* ── DIVIDER LABEL ── */
+        .stats-bar {
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .stat-value {
+            font-family: var(--mono);
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--cyan);
+        }
+
+        .stat-label {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        /* ── HEADER OVERVIEW ROW ── */
+        .overview-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 1rem;
+        }
+
+        .overview-tile {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem 1.1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+
+        .tile-label {
+            font-family: var(--mono);
+            font-size: 0.62rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .tile-value {
+            font-family: var(--mono);
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .tile-value.cyan  { color: var(--cyan); }
+        .tile-value.green { color: var(--green); }
+        .tile-value.red   { color: var(--red); }
+        .tile-value.white { color: var(--text); }
+
+        .tile-sub {
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            color: var(--text-muted);
+        }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 820px) {
+            .app-layout {
+                grid-template-columns: 1fr;
+            }
+            .sidebar {
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+            }
+            .topology-canvas { display: none; }
+        }
+
+        @media (max-width: 600px) {
+            .topbar { padding: 0 1rem; }
+            .topbar-breadcrumb { display: none; }
+            .main-content { padding: 1rem; }
+            .form-row { flex-direction: column; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .live-dot, .node-pulse-ring::after { animation: none; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── TOPBAR ── -->
+<header class="topbar">
+    <div class="topbar-left">
+        <div class="logo">
+            <div class="logo-icon">🍍</div>
+            PickleDB
+        </div>
+        <div class="topbar-breadcrumb">
+            cluster <span>/</span> dashboard
+        </div>
+    </div>
+    <div class="topbar-right">
+        <div class="live-indicator">
+            <div class="live-dot"></div>
+            POLLING · 5s
+        </div>
+        <div class="refresh-badge" id="lastRefresh">–</div>
+    </div>
+</header>
+
+<!-- ── APP LAYOUT ── -->
+<div class="app-layout">
+
+    <!-- ── SIDEBAR ── -->
+    <aside class="sidebar">
+        <div>
+            <div class="sidebar-section-label">Cluster Topology</div>
+            <div class="topology-canvas">
+                <svg id="topologySvg" viewBox="0 0 276 140" xmlns="http://www.w3.org/2000/svg">
+                    <!-- lines drawn by JS -->
+                    <g id="topoLines"></g>
+                    <g id="topoNodes"></g>
+                </svg>
+            </div>
+        </div>
+
+        <div>
+            <div class="sidebar-section-label">Node Health</div>
+            <div class="node-list" id="nodeList">
+                <div class="empty-state" style="padding:1rem">
+                    <div class="empty-icon">📡</div>
+                    Connecting…
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick stats -->
+        <div>
+            <div class="sidebar-section-label">Quick Stats</div>
+            <div style="display:flex;flex-direction:column;gap:0.5rem;">
+                <div class="overview-tile" style="flex-direction:row;align-items:center;justify-content:space-between;">
+                    <span class="tile-label">Online</span>
+                    <span class="tile-value green" id="sOnline">–</span>
+                </div>
+                <div class="overview-tile" style="flex-direction:row;align-items:center;justify-content:space-between;">
+                    <span class="tile-label">Offline</span>
+                    <span class="tile-value red" id="sOffline">–</span>
+                </div>
+                <div class="overview-tile" style="flex-direction:row;align-items:center;justify-content:space-between;">
+                    <span class="tile-label">Keys</span>
+                    <span class="tile-value cyan" id="sKeys">–</span>
+                </div>
+                <div class="overview-tile" style="flex-direction:row;align-items:center;justify-content:space-between;">
+                    <span class="tile-label">Replicas</span>
+                    <span class="tile-value white" id="sReplicas">–</span>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ── MAIN CONTENT ── -->
+    <main class="main-content">
+
+        <!-- Primary Data Panel -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="panel-title-icon">📚</span>
+                    Primary Node Data
+                </div>
+                <div class="panel-pill cyan" id="keyCount">0 keys</div>
+            </div>
+            <div class="panel-body scrollable" id="dataPanel">
+                <div class="empty-state">
+                    <div class="empty-icon">⏳</div>
+                    Loading…
+                </div>
+            </div>
+        </div>
+
+        <!-- Replica Data Panel -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="panel-title-icon">🔄</span>
+                    Replica Snapshots
+                </div>
+                <div class="panel-pill green" id="replicaCount">0 replicas</div>
+            </div>
+            <div class="panel-body" id="replicaPanel">
+                <div class="empty-state">
+                    <div class="empty-icon">⏳</div>
+                    Fetching replicas…
+                </div>
+            </div>
+        </div>
+
+        <!-- Write Panel -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="panel-title-icon">✏️</span>
+                    Write to Cluster
+                </div>
+                <div class="panel-pill cyan">SET → broadcast</div>
+            </div>
+            <div class="panel-body">
+                <div class="form-row">
+                    <div class="field">
+                        <label>Key</label>
+                        <input type="text" id="key" placeholder="e.g. user:session, config:timeout" autocomplete="off">
+                    </div>
+                    <div class="field">
+                        <label>Value (string or JSON)</label>
+                        <input type="text" id="value" placeholder="any text, number, or JSON object">
+                    </div>
+                    <button class="btn-save" id="saveBtn">SAVE →</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<script>
+    // ── DOM refs ──
+    const nodeListEl    = document.getElementById("nodeList");
+    const dataPanelEl   = document.getElementById("dataPanel");
+    const replicaPanelEl= document.getElementById("replicaPanel");
+    const keyInput      = document.getElementById("key");
+    const valueInput    = document.getElementById("value");
+    const saveBtn       = document.getElementById("saveBtn");
+    const keyCountEl    = document.getElementById("keyCount");
+    const replicaCountEl= document.getElementById("replicaCount");
+    const lastRefreshEl = document.getElementById("lastRefresh");
+    const sOnline       = document.getElementById("sOnline");
+    const sOffline      = document.getElementById("sOffline");
+    const sKeys         = document.getElementById("sKeys");
+    const sReplicas     = document.getElementById("sReplicas");
+
+    // ── Helpers ──
+    function formatValue(v) {
+        if (v === null || v === undefined) return "∅";
+        if (typeof v === "string") return v;
+        if (typeof v === "number" || typeof v === "boolean") return String(v);
+        try { return JSON.stringify(v, null, 0); } catch { return String(v); }
+    }
+
+    function nowStr() {
+        return new Date().toLocaleTimeString('en-GB', { hour12: false });
+    }
+
+    // ── Topology SVG ──
+    function drawTopology(nodes) {
+        const linesG = document.getElementById("topoLines");
+        const nodesG = document.getElementById("topoNodes");
+        linesG.innerHTML = "";
+        nodesG.innerHTML = "";
+
+        if (!nodes.length) return;
+
+        const W = 276, H = 140;
+        const cx = W / 2, cy = H / 2;
+        const r  = Math.min(cx, cy) - 26;
+
+        // positions
+        const positions = nodes.map((_, i) => {
+            const angle = (2 * Math.PI * i / nodes.length) - Math.PI / 2;
+            return {
+                x: cx + r * Math.cos(angle),
+                y: cy + r * Math.sin(angle)
+            };
+        });
+
+        // draw connecting lines (hub-and-spoke if >1 node)
+        for (let i = 0; i < positions.length; i++) {
+            for (let j = i + 1; j < positions.length; j++) {
+                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                line.setAttribute("x1", positions[i].x);
+                line.setAttribute("y1", positions[i].y);
+                line.setAttribute("x2", positions[j].x);
+                line.setAttribute("y2", positions[j].y);
+                line.setAttribute("stroke", "#30363d");
+                line.setAttribute("stroke-width", "1");
+                line.setAttribute("stroke-dasharray", "3,3");
+                linesG.appendChild(line);
+            }
+        }
+
+        // draw node circles
+        nodes.forEach(([name, state], i) => {
+            const { x, y } = positions[i];
+            const isOnline = (state === "ONLINE" || state === "online");
+            const color = isOnline ? "#39d353" : "#ff6b6b";
+
+            // outer glow
+            if (isOnline) {
+                const glow = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                glow.setAttribute("cx", x); glow.setAttribute("cy", y);
+                glow.setAttribute("r", "14");
+                glow.setAttribute("fill", "rgba(57,211,83,0.08)");
+                glow.setAttribute("stroke", "rgba(57,211,83,0.2)");
+                glow.setAttribute("stroke-width", "1");
+                nodesG.appendChild(glow);
+            }
+
+            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            circle.setAttribute("cx", x); circle.setAttribute("cy", y);
+            circle.setAttribute("r", "8");
+            circle.setAttribute("fill", isOnline ? "rgba(57,211,83,0.2)" : "rgba(255,107,107,0.2)");
+            circle.setAttribute("stroke", color);
+            circle.setAttribute("stroke-width", "1.5");
+            nodesG.appendChild(circle);
+
+            const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            dot.setAttribute("cx", x); dot.setAttribute("cy", y);
+            dot.setAttribute("r", "3");
+            dot.setAttribute("fill", color);
+            nodesG.appendChild(dot);
+
+            // label
+            const shortName = name.split(":")[0].slice(0, 8);
+            const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            label.setAttribute("x", x);
+            label.setAttribute("y", y + 22);
+            label.setAttribute("text-anchor", "middle");
+            label.setAttribute("font-family", "JetBrains Mono, monospace");
+            label.setAttribute("font-size", "9");
+            label.setAttribute("fill", "#7d8590");
+            label.textContent = shortName;
+            nodesG.appendChild(label);
+        });
+    }
+
+    // ── Load Status ──
+    async function loadStatus() {
+        try {
+            const res = await fetch("/status");
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const entries = Object.entries(data);
+
+            if (!entries.length) {
+                nodeListEl.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div>No nodes configured</div>';
+                drawTopology([]);
+                sOnline.textContent = "0"; sOffline.textContent = "0";
+                return;
+            }
+
+            const onlineCount  = entries.filter(([,s]) => s === "ONLINE" || s === "online").length;
+            const offlineCount = entries.length - onlineCount;
+
+            sOnline.textContent  = onlineCount;
+            sOffline.textContent = offlineCount;
+
+            // Render node list
+            nodeListEl.innerHTML = "";
+            entries.forEach(([node, state]) => {
+                const isOnline = (state === "ONLINE" || state === "online");
+                const item = document.createElement("div");
+                item.className = `node-item ${isOnline ? "online" : "offline"}`;
+
+                item.innerHTML = `
+                    <div class="node-pulse-ring"><div class="node-dot"></div></div>
+                    <div class="node-info">
+                        <div class="node-name-text">${node}</div>
+                        <div class="node-status-text">${isOnline ? "● ONLINE" : "○ OFFLINE"}</div>
+                    </div>
+                `;
+                nodeListEl.appendChild(item);
+            });
+
+            drawTopology(entries);
+
+            lastRefreshEl.textContent = nowStr();
+        } catch (err) {
+            nodeListEl.innerHTML = '<div class="error-state">🔌 Cannot reach /status</div>';
+            console.error(err);
+        }
+    }
+
+    // ── Load Primary Data ──
+    async function loadData() {
+        try {
+            const res = await fetch("/data");
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const entries = Object.entries(data);
+
+            keyCountEl.textContent = `${entries.length} key${entries.length !== 1 ? "s" : ""}`;
+            sKeys.textContent = entries.length;
+
+            if (!entries.length) {
+                dataPanelEl.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>No entries yet — use the form below to write data</div>';
+                return;
+            }
+
+            const table = document.createElement("table");
+            table.className = "data-table";
+            table.innerHTML = `<thead><tr><th>Key</th><th>Value</th></tr></thead>`;
+            const tbody = document.createElement("tbody");
+
+            entries.forEach(([k, v]) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td class="key-cell"><span class="key-badge">${k}</span></td>
+                    <td class="val-cell">${formatValue(v)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            table.appendChild(tbody);
+            dataPanelEl.replaceChildren(table);
+        } catch (err) {
+            dataPanelEl.innerHTML = '<div class="error-state">⚠️ Failed to load primary data</div>';
+            console.error(err);
+        }
+    }
+
+    // ── Load Replica Data ──
+    async function loadReplicaData() {
+        try {
+            const res = await fetch("/replica-data");
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const entries = Object.entries(data);
+
+            replicaCountEl.textContent = `${entries.length} replica${entries.length !== 1 ? "s" : ""}`;
+            sReplicas.textContent = entries.length;
+
+            if (!entries.length) {
+                replicaPanelEl.innerHTML = '<div class="empty-state"><div class="empty-icon">🪞</div>No replicas discovered</div>';
+                return;
+            }
+
+            const grid = document.createElement("div");
+            grid.className = "replica-grid";
+
+            entries.forEach(([nodeName, result]) => {
+                const isHealthy = result?.status === "ok";
+                const card = document.createElement("div");
+                card.className = `replica-card ${isHealthy ? "healthy" : "unhealthy"}`;
+
+                const head = document.createElement("div");
+                head.className = "replica-card-head";
+                head.innerHTML = `
+                    <span class="replica-node-label">${nodeName}</span>
+                    <span class="status-chip ${isHealthy ? "chip-ok" : "chip-error"}">
+                        ${isHealthy ? "✓ reachable" : "✗ unreachable"}
+                    </span>
+                `;
+
+                const body = document.createElement("div");
+                body.className = "replica-card-body";
+
+                if (!isHealthy) {
+                    body.innerHTML = `<div class="replica-error-msg">${result?.error || "OFFLINE / TIMEOUT"}</div>`;
+                } else {
+                    const snapshot = result?.data || {};
+                    const snap = Object.entries(snapshot);
+                    if (!snap.length) {
+                        body.innerHTML = `<div class="empty-state" style="padding:0.8rem;font-size:0.75rem"><div>📭</div>Empty replica</div>`;
+                    } else {
+                        snap.forEach(([k, v]) => {
+                            const row = document.createElement("div");
+                            row.className = "replica-row";
+                            row.innerHTML = `
+                                <span class="r-key" title="${k}">${k}</span>
+                                <span class="r-sep">→</span>
+                                <span class="r-val">${formatValue(v)}</span>
+                            `;
+                            body.appendChild(row);
+                        });
+                    }
+                }
+
+                card.appendChild(head);
+                card.appendChild(body);
+                grid.appendChild(card);
+            });
+
+            replicaPanelEl.replaceChildren(grid);
+        } catch (err) {
+            replicaPanelEl.innerHTML = '<div class="error-state">❌ Cannot fetch replica data</div>';
+            console.error(err);
+        }
+    }
+
+    // ── Save ──
+    async function saveData() {
+        const key   = keyInput.value.trim();
+        const value = valueInput.value;
+
+        if (!key) { keyInput.focus(); keyInput.style.borderColor = "var(--red)"; return; }
+        keyInput.style.borderColor = "";
+
+        const orig = saveBtn.textContent;
+        saveBtn.textContent = "SYNCING…";
+        saveBtn.disabled = true;
+
+        try {
+            const res = await fetch("/set", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ key, value })
+            });
+
+            if (!res.ok) {
+                const txt = await res.text().catch(() => "unknown");
+                throw new Error(`${res.status}: ${txt}`);
+            }
+
+            keyInput.value = "";
+            valueInput.value = "";
+
+            await Promise.all([loadData(), loadReplicaData()]);
+
+            saveBtn.textContent = "SAVED ✓";
+            setTimeout(() => { saveBtn.textContent = orig; }, 1200);
+        } catch (err) {
+            alert(`Save failed: ${err.message || "backend unreachable"}`);
+            saveBtn.textContent = orig;
+        } finally {
+            saveBtn.disabled = false;
+        }
+    }
+
+    // ── Events ──
+    saveBtn.addEventListener("click", saveData);
+    [keyInput, valueInput].forEach(el =>
+        el.addEventListener("keypress", e => { if (e.key === "Enter") { e.preventDefault(); saveData(); } })
+    );
+
+    keyInput.addEventListener("input", () => { keyInput.style.borderColor = ""; });
+
+    // ── Init + Poll ──
+    function refresh() {
+        loadStatus();
+        loadData();
+        loadReplicaData();
+    }
+
+    refresh();
+    setInterval(refresh, 5000);  // Đã sửa từ 4000 thành 5000 để khớp với chỉ báo 5s
+    window.addEventListener("online", refresh);
+</script>
+</body>
+</html>
