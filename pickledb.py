@@ -4,7 +4,7 @@ Harrison Erd - https://harrisonerd.com/
 Licensed - BSD 3 Clause (see LICENSE)
 """
 
-from __future__ import annotations
+from __future__ import annotations  # Thêm khả năng sử dụng kiểu của chính lớp trong định nghĩa lớp
 
 import asyncio
 import os
@@ -59,7 +59,7 @@ class PickleDB:
     orjson-encoded file at `self.location`.
     """
 
-    def __init__(
+    def __init__( # Node đơn lẻ sang mô hình lưu trữ phân tán với replica manager) 
         self,
         location: str,
         replicas: Iterable[str] | None = None,
@@ -131,7 +131,7 @@ class PickleDB:
             await asyncio.to_thread(os.replace, temp, self.location)
         return True
 
-    @dualmethod
+    @dualmethod # Bổ sung cơ chế replication khi set giá trị mới, đảm bảo dữ liệu được đồng bộ trên các node sao chép
     async def set(self, key, value) -> bool:
         """Set a key-value pair. Always returns True."""
         key = str(key)

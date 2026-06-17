@@ -7,15 +7,15 @@ from heartbeat_manager import HeartbeatManager
 from pickledb import PickleDB
 
 
-NODE_NAME = "worker1"
+NODE_NAME = "worker1" # Khởi tạo tên node cho worker1, giúp phân biệt với các node sao chép khác trong hệ thống
 DB_FILE = "worker1.json"
 REPLICAS = [
     "http://127.0.0.1:8001",
     "http://127.0.0.1:8002",
 ]
 
-app = FastAPI()
-db = PickleDB(DB_FILE).load()
+app = FastAPI() # Tạo một ứng dụng FastAPI để cung cấp các endpoint cho worker1, bao gồm endpoint để nhận yêu cầu replication, kiểm tra heartbeat và lấy tất cả dữ liệu hiện có
+db = PickleDB(DB_FILE).load() # Khởi tạo một instance của PickleDB để quản lý dữ liệu của worker1, sử dụng file JSON làm nơi lưu trữ dữ liệu và hỗ trợ cơ chế replication với các node sao chép khác thông qua replica manager
 manager = HeartbeatManager(REPLICAS)
 
 
