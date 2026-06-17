@@ -1,3 +1,4 @@
+# Distributed PickleDB with Replication and Heartbeat
 [![Logo](https://patx.github.io/pickledb/logo.png)](https://patx.github.io/pickledb)
 
 [pickleDB](https://patx.github.io/pickledb) is a fast, easy to use, in-memory Python 
@@ -15,60 +16,99 @@ db.set("key", "value")
 db.get("key")  # return "value"
 ```
 
-## Distributed features
+A demo fork of PickleDB that adds simple distributed replication and worker
+heartbeat monitoring on top of the original async/sync JSON-backed key-value
+store.
 
-This fork adds two distributed-systems features on top of PickleDB:
+## What this repository includes
 
-- Data Replication: writes on the dashboard node are replicated to worker nodes.
-- Heartbeat and Failure Detection: the dashboard periodically checks worker
-  nodes and marks them as `ONLINE` or `OFFLINE`.
+- `pickledb.py`: the core PickleDB key-value store using `orjson` and `aiofiles`.
+- `replica_manager.py`: asynchronous replication support for forwarding writes to
+  replica nodes.
+- `heartbeat_manager.py`: worker health checks using periodic heartbeat requests.
+- `dashboard.py`: primary node UI and API for saving data, viewing replicas, and
+  checking worker status.
+- `worker1.py`, `worker2.py`: replica nodes that accept replication requests and
+  expose their stored data and heartbeat endpoints.
+- `templates/index.html`: dashboard frontend for status, replica snapshots, and
+  write operations.
 
-The demo uses a primary-replica model:
+## Features
 
-```text
-Dashboard / Primary Node :8000
-  |-- Worker 1 / Replica :8001
-  `-- Worker 2 / Replica :8002
-```
+- Fast in-memory key-value storage with optional persistence to a JSON file.
+- Primary-replica write replication from dashboard to worker nodes.
+- Heartbeat-based worker liveness detection.
+- Simple browser dashboard for status and replica inspection.
 
-Install the optional dashboard dependencies:
+## Requirements
+
+- Python 3.10+
+- `pip`
+
+Optional dependencies are defined in `pyproject.toml`:
+
+- `distributed`: `aiohttp`, `fastapi`, `jinja2`, `pydantic`, `uvicorn`
+- `test`: `aiohttp`, `aiosqlite`, `pytest`, `pytest-asyncio`
+
+## Installation
+
+Install the package with distributed dependencies:
 
 ```bash
-pip install -e ".[distributed]"
+pip install -e '.[distributed]'
 ```
 
-Run the dashboard and two replicas in separate terminals:
+Install test dependencies separately when needed:
 
 ```bash
-uvicorn dashboard:app --port 8000
+pip install -e '.[test]'
+```
+
+## Run the demo
+
+Start the dashboard and worker nodes in separate terminals:
+
+```bash
+uvicorn dashboard:app --port 9000
 uvicorn worker1:app --port 8001
 uvicorn worker2:app --port 8002
 ```
 
-Open `http://127.0.0.1:8000` to view node health and replicated data. If port
-8000 is busy, use another dashboard port, for example:
+Open the dashboard at:
 
-```bash
-uvicorn dashboard:app --port 9000
+```text
+http://127.0.0.1:9000
 ```
 
-Use the form in the dashboard to save a key-value pair. The dashboard writes to
-`dashboard.json`, then PickleDB's replica manager sends the write to worker
-nodes through `/replicate`. The dashboard reads each worker's `/all` endpoint
-through `/replica-data` so each replica snapshot is visible in the browser.
+The dashboard writes data into `dashboard.json` and replicates each key/value to
+`worker1.json` and `worker2.json` via `/replicate`. The dashboard also polls
+worker heartbeat and replica snapshots through its API.
 
-To demo failure detection, stop one worker process. Within a few seconds, the
-dashboard should mark that worker as `OFFLINE`. Start it again and the status
-should return to `ONLINE`.
+## Demo behavior
 
-## Tests
+- Add a key/value pair in the dashboard form.
+- The dashboard persists the data locally and sends it to both worker nodes.
+- The dashboard fetches replica snapshots from each worker using `/all`.
+- If you stop a worker, the dashboard will show that node as `OFFLINE`.
+- Restart the worker to restore its `ONLINE` status.
 
-Install test dependencies and run the unit tests:
+## Testing
+
+Run the test suite with:
 
 ```bash
-pip install -e ".[test]"
 python -m pytest -q
 ```
 
-The million-entry stress test is disabled by default. Enable it explicitly with
-`RUN_STRESS_TESTS=1 python -m pytest -m stress`.
+To enable longer stress tests explicitly:
+
+```bash
+RUN_STRESS_TESTS=1 python -m pytest -m stress
+```
+
+## Notes
+
+- The repository is based on the original PickleDB project and extends it with
+  a minimal distributed demo.
+- The dashboard and workers use local HTTP endpoints on ports `8000`, `8001`,
+  and `8002` by default.
