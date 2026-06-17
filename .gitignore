@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.tmp
+
+dashboard.json
+test.json
+test_db.json
+worker1.json
+worker2.json
+*.sqlite3

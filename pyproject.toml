@@ -10,7 +10,10 @@ keywords = ["pickle", "database", "json", "redis", "asyncio", "sqlite"]
 readme = "README.md"
 authors = [{ name = "Harrison Erd", email = "harrisonerd@gmail.com" }]
 license = {file = "LICENSE"}
-dependencies = ["orjson", "aiofiles"]
+dependencies = [
+    "aiofiles",
+    "orjson",
+]
 requires-python = ">=3.10"
 classifiers = [
     "Framework :: AsyncIO",
@@ -24,8 +27,25 @@ classifiers = [
 
 [project.optional-dependencies]
 sqlite = ["aiosqlite"]
+distributed = [
+    "aiohttp",
+    "fastapi",
+    "jinja2",
+    "pydantic",
+    "uvicorn",
+]
+test = [
+    "aiohttp",
+    "aiosqlite",
+    "pytest",
+    "pytest-asyncio",
+]
 
 [project.urls]
 Homepage = "https://patx.github.io/pickledb"
 Repository = "https://github.com/patx/pickledb"
 
+[tool.pytest.ini_options]
+markers = [
+    "stress: long-running stress tests that must be enabled explicitly",
+]
